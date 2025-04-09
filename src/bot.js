@@ -1,5 +1,5 @@
 // 导入必要的模块
-import TelegramBot from 'node-telegram-bot-api';
+import fetch from 'node-fetch';
 import winston from 'winston';
 import { config } from './config.js';
 
@@ -26,27 +26,47 @@ if (process.env.NODE_ENV !== 'production') {
 // Telegram Bot 服务类
 class TelegramBotService {
   constructor() {
-    // 初始化 Telegram Bot，使用配置中的 token
-    // polling: false 表示不使用轮询模式
-    this.bot = new TelegramBot(config.botToken, { polling: false });
+    // 设置 API 基础 URL
+    this.baseUrl = `https://api.telegram.org/bot${config.botToken}`;
   }
 
   // 发送消息方法
   async sendMessage(chatId, message) {
     try {
-      // 调用 Telegram Bot API 发送消息
-      const result = await this.bot.sendMessage(chatId, message);
+      // 构建 API URL
+      const url = `${this.baseUrl}/sendMessage`;
       
+      // 发送请求到 Telegram API
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: 'HTML'  // 支持 HTML 格式的消息
+        })
+      });
+
+      // 解析响应
+      const result = await response.json();
+
+      // 检查响应是否成功
+      if (!result.ok) {
+        throw new Error(result.description || 'Unknown error');
+      }
+
       // 记录成功日志
       logger.info('Message sent successfully', { 
         chatId, 
-        messageId: result.message_id 
+        messageId: result.result.message_id 
       });
       
       // 返回成功响应
       return {
         success: true,
-        messageId: result.message_id
+        messageId: result.result.message_id
       };
     } catch (error) {
       // 记录错误日志
@@ -60,6 +80,24 @@ class TelegramBotService {
         success: false,
         error: error.message
       };
+    }
+  }
+
+  // 获取更新方法（可选）
+  async getUpdates(offset = 0) {
+    try {
+      const url = `${this.baseUrl}/getUpdates?offset=${offset}`;
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        throw new Error(result.description || 'Unknown error');
+      }
+
+      return result.result;
+    } catch (error) {
+      logger.error('Failed to get updates', { error: error.message });
+      throw error;
     }
   }
 }
