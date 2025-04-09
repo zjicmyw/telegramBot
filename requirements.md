@@ -1,7 +1,7 @@
 # Telegram Bot 需求文档
 
 ## 1. 项目概述
-开发一个基于 Node.js 的 Telegram Bot，提供本地接口用于发送消息。
+开发一个基于 Node.js 的 Telegram Bot，提供本地 HTTP 接口用于发送消息。使用 Telegram 官方 API 直接通信，确保稳定性和安全性。
 
 ## 2. 功能需求
 
@@ -9,36 +9,65 @@
 - 通过本地 HTTP 接口接收消息发送请求
 - 将消息转发到指定的 Telegram 群组或用户
 - 支持文本消息的发送
+- 支持 HTML 格式的消息内容
 - 支持消息发送状态的回调
+- 支持获取聊天信息
+- 支持获取更新信息
 
 ### 2.2 接口设计
 - 本地 HTTP 接口：
-  - 路径：`/send-message`
-  - 方法：POST
-  - 请求体格式：
-    ```json
-    {
-      "chatId": "目标聊天ID",
-      "message": "要发送的消息内容"
-    }
-    ```
-  - 响应格式：
-    ```json
-    {
-      "success": true/false,
-      "messageId": "消息ID",
-      "error": "错误信息（如果有）"
-    }
-    ```
+  - 发送消息接口：
+    - 路径：`/send-message`
+    - 方法：POST
+    - 请求体格式：
+      ```json
+      {
+        "chatId": "目标聊天ID",
+        "message": "要发送的消息内容"
+      }
+      ```
+    - 响应格式：
+      ```json
+      {
+        "success": true/false,
+        "messageId": "消息ID",
+        "error": "错误信息（如果有）"
+      }
+      ```
+  - 获取聊天信息接口：
+    - 路径：`/chat-info`
+    - 方法：GET
+    - 请求体格式：
+      ```json
+      {
+        "chatId": "目标聊天ID"
+      }
+      ```
+    - 响应格式：
+      ```json
+      {
+        "success": true/false,
+        "chatInfo": {
+          "id": "聊天ID",
+          "type": "聊天类型",
+          "title": "群组标题（如果是群组）",
+          "username": "用户名（如果有）"
+        },
+        "error": "错误信息（如果有）"
+      }
+      ```
 
 ## 3. 技术规格
 
 ### 3.1 开发环境
 - Node.js 版本：>= 16.x
 - 主要依赖：
-  - `node-telegram-bot-api`：用于与 Telegram Bot API 交互
+  - `axios`：用于与 Telegram Bot API 交互
   - `express`：用于创建本地 HTTP 服务器
   - `dotenv`：用于环境变量管理
+  - `winston`：用于日志记录
+  - `helmet`：用于安全中间件
+  - `express-rate-limit`：用于请求限制
 
 ### 3.2 项目结构
 ```
@@ -47,31 +76,50 @@ telegramBot/
 │   ├── bot.js          # Bot 核心逻辑
 │   ├── server.js       # HTTP 服务器
 │   └── config.js       # 配置文件
+├── test/               # 测试文件
+│   ├── bot.test.js     # Bot 测试
+│   └── server.test.js  # 服务器测试
 ├── .env                # 环境变量
+├── .env.example        # 环境变量示例
+├── .gitignore          # Git 忽略文件
 ├── package.json        # 项目依赖
-└── README.md           # 项目说明
+├── README.md           # 项目说明
+└── requirements.md     # 需求文档
 ```
 
 ## 4. 安全要求
 - 本地接口需要实现基本的认证机制
 - 敏感配置（如 Bot Token）必须通过环境变量管理
 - 实现请求频率限制，防止滥用
+- 使用 Helmet 中间件增强安全性
+- 支持 HTTPS（生产环境必需）
+- 实现完整的错误处理机制
+- 记录详细的操作日志
 
 ## 5. 部署要求
 - 支持 Docker 容器化部署
 - 提供详细的部署文档
 - 包含基本的错误处理和日志记录
+- 支持环境变量配置
+- 支持进程管理（如 PM2）
+- 支持负载均衡（可选）
 
 ## 6. 测试要求
 - 实现单元测试
 - 提供接口测试用例
 - 包含基本的错误场景测试
+- 测试覆盖率要求 > 80%
+- 包含性能测试
+- 包含安全测试
 
 ## 7. 文档要求
 - API 接口文档
 - 部署文档
 - 使用示例
 - 错误处理指南
+- 开发环境配置指南
+- 贡献指南
+- 更新日志
 
 ## 8. 开发计划
 1. 环境搭建和基础配置
@@ -80,4 +128,15 @@ telegramBot/
 4. 安全机制实现
 5. 测试用例编写
 6. 文档编写
-7. 部署配置 
+7. 部署配置
+8. 性能优化
+9. 安全审计
+10. 上线部署
+
+## 9. 维护计划
+- 定期更新依赖包
+- 监控系统运行状态
+- 定期备份数据
+- 定期安全审计
+- 收集用户反馈
+- 持续优化性能 

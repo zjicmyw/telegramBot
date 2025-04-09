@@ -1,5 +1,5 @@
 // 导入必要的模块
-import fetch from 'node-fetch';
+import axios from 'axios';
 import winston from 'winston';
 import { config } from './config.js';
 
@@ -28,57 +28,57 @@ class TelegramBotService {
   constructor() {
     // 设置 API 基础 URL
     this.baseUrl = `https://api.telegram.org/bot${config.botToken}`;
+    
+    // 创建 axios 实例，配置默认选项
+    this.axiosInstance = axios.create({
+      baseURL: this.baseUrl,
+      timeout: 10000,  // 10秒超时
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
   }
 
   // 发送消息方法
   async sendMessage(chatId, message) {
     try {
-      // 构建 API URL
-      const url = `${this.baseUrl}/sendMessage`;
-      
       // 发送请求到 Telegram API
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: 'HTML'  // 支持 HTML 格式的消息
-        })
+      const response = await this.axiosInstance.post('/sendMessage', {
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'HTML'  // 支持 HTML 格式的消息
       });
 
-      // 解析响应
-      const result = await response.json();
-
       // 检查响应是否成功
-      if (!result.ok) {
-        throw new Error(result.description || 'Unknown error');
+      if (!response.data.ok) {
+        throw new Error(response.data.description || 'Unknown error');
       }
 
       // 记录成功日志
       logger.info('Message sent successfully', { 
         chatId, 
-        messageId: result.result.message_id 
+        messageId: response.data.result.message_id 
       });
       
       // 返回成功响应
       return {
         success: true,
-        messageId: result.result.message_id
+        messageId: response.data.result.message_id
       };
     } catch (error) {
+      // 处理 axios 错误
+      const errorMessage = error.response?.data?.description || error.message;
+      
       // 记录错误日志
       logger.error('Failed to send message', { 
-        error: error.message, 
+        error: errorMessage, 
         chatId 
       });
       
       // 返回错误响应
       return {
         success: false,
-        error: error.message
+        error: errorMessage
       };
     }
   }
@@ -86,17 +86,37 @@ class TelegramBotService {
   // 获取更新方法（可选）
   async getUpdates(offset = 0) {
     try {
-      const url = `${this.baseUrl}/getUpdates?offset=${offset}`;
-      const response = await fetch(url);
-      const result = await response.json();
+      const response = await this.axiosInstance.get('/getUpdates', {
+        params: { offset }
+      });
       
-      if (!result.ok) {
-        throw new Error(result.description || 'Unknown error');
+      if (!response.data.ok) {
+        throw new Error(response.data.description || 'Unknown error');
       }
 
-      return result.result;
+      return response.data.result;
     } catch (error) {
-      logger.error('Failed to get updates', { error: error.message });
+      const errorMessage = error.response?.data?.description || error.message;
+      logger.error('Failed to get updates', { error: errorMessage });
+      throw error;
+    }
+  }
+
+  // 获取聊天信息方法（可选）
+  async getChat(chatId) {
+    try {
+      const response = await this.axiosInstance.get('/getChat', {
+        params: { chat_id: chatId }
+      });
+      
+      if (!response.data.ok) {
+        throw new Error(response.data.description || 'Unknown error');
+      }
+
+      return response.data.result;
+    } catch (error) {
+      const errorMessage = error.response?.data?.description || error.message;
+      logger.error('Failed to get chat info', { error: errorMessage, chatId });
       throw error;
     }
   }

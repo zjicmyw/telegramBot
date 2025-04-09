@@ -48,6 +48,49 @@ app.post('/send-message', authenticate, async (req, res) => {
   res.status(result.success ? 200 : 500).json(result);
 });
 
+// 获取聊天信息接口
+// GET /chat-info
+app.get('/chat-info', authenticate, async (req, res) => {
+  const chatId = req.query.chatId;
+
+  if (!chatId) {
+    return res.status(400).json({
+      success: false,
+      error: 'Missing required parameter: chatId'
+    });
+  }
+
+  try {
+    const chatInfo = await botService.getChat(chatId);
+    res.json({
+      success: true,
+      chatInfo
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// 获取更新信息接口
+// GET /updates
+app.get('/updates', authenticate, async (req, res) => {
+  try {
+    const updates = await botService.getUpdates();
+    res.json({
+      success: true,
+      updates
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // 错误处理中间件
 // 捕获并处理所有未处理的错误
 app.use((err, req, res, next) => {
