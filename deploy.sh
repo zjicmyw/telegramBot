@@ -99,9 +99,9 @@ start_app() {
     # 检查应用是否已在运行
     if pm2 list | grep -q "telegram-bot"; then
         print_warn "应用已在运行，正在重启..."
-        pm2 restart ecosystem.config.js
+        pm2 restart ecosystem.config.cjs
     else
-        pm2 start ecosystem.config.js
+        pm2 start ecosystem.config.cjs
     fi
     
     if [ $? -eq 0 ]; then

@@ -9,6 +9,7 @@ node_modules/
 *.log
 error.log
 combined.log
+logs/
 
 # 操作系统文件
 .DS_Store

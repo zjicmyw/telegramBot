@@ -3,7 +3,7 @@
  * 用于在 Ubuntu 服务器上守护运行 Telegram Bot
  */
 
-export default {
+module.exports = {
   apps: [{
     // 应用名称
     name: 'telegram-bot',

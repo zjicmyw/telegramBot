@@ -107,13 +107,9 @@ X-API-Key: your_api_key_here
 
 **请求**
 ```http
-GET /chat-info
+GET /chat-info?chatId=目标聊天ID
 Content-Type: application/json
 X-API-Key: your_api_key_here
-
-{
-    "chatId": "目标聊天ID"
-}
 ```
 
 **响应**
@@ -128,6 +124,204 @@ X-API-Key: your_api_key_here
     }
 }
 ```
+
+## 服务集成与调用示例
+
+### 基础配置
+
+服务默认运行在 `http://localhost:3000`（可通过环境变量 `PORT` 修改）。
+
+**基础 URL：**
+```
+http://localhost:3000
+```
+
+**认证方式：**
+所有请求需要在请求头中包含 `X-API-Key`，值为 `.env` 文件中配置的 `API_KEY`。
+
+### 使用 Node.js 调用
+
+```javascript
+import axios from 'axios';
+
+const API_BASE_URL = 'http://localhost:3000';
+const API_KEY = 'your_api_key_here';
+
+// 发送消息
+async function sendMessage(chatId, message) {
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/send-message`,
+      {
+        chatId: chatId,
+        message: message
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY
+        }
+      }
+    );
+    
+    if (response.data.success) {
+      console.log('消息发送成功，消息ID:', response.data.messageId);
+      return response.data;
+    } else {
+      console.error('消息发送失败:', response.data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('请求错误:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// 获取聊天信息
+async function getChatInfo(chatId) {
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/chat-info`,
+      {
+        params: { chatId },
+        headers: {
+          'X-API-Key': API_KEY
+        }
+      }
+    );
+    
+    if (response.data.success) {
+      console.log('聊天信息:', response.data.chatInfo);
+      return response.data.chatInfo;
+    } else {
+      console.error('获取失败:', response.data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('请求错误:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// 使用示例
+sendMessage('123456789', 'Hello from Node.js!');
+getChatInfo('123456789');
+```
+
+### 使用 Python 调用
+
+```python
+import requests
+
+API_BASE_URL = 'http://localhost:3000'
+API_KEY = 'your_api_key_here'
+
+def send_message(chat_id, message):
+    """发送消息到 Telegram"""
+    url = f'{API_BASE_URL}/send-message'
+    headers = {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY
+    }
+    data = {
+        'chatId': chat_id,
+        'message': message
+    }
+    
+    try:
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get('success'):
+            print(f"消息发送成功，消息ID: {result.get('messageId')}")
+            return result
+        else:
+            print(f"消息发送失败: {result.get('error')}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误: {e}")
+        return None
+
+def get_chat_info(chat_id):
+    """获取聊天信息"""
+    url = f'{API_BASE_URL}/chat-info'
+    headers = {
+        'X-API-Key': API_KEY
+    }
+    params = {
+        'chatId': chat_id
+    }
+    
+    try:
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get('success'):
+            print(f"聊天信息: {result.get('chatInfo')}")
+            return result.get('chatInfo')
+        else:
+            print(f"获取失败: {result.get('error')}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误: {e}")
+        return None
+
+# 使用示例
+send_message('123456789', 'Hello from Python!')
+get_chat_info('123456789')
+```
+
+### 错误处理
+
+所有接口在出错时会返回相应的 HTTP 状态码和错误信息：
+
+**成功响应（200）：**
+```json
+{
+    "success": true,
+    "messageId": "12345"
+}
+```
+
+**错误响应（400/401/500）：**
+```json
+{
+    "success": false,
+    "error": "错误描述信息"
+}
+```
+
+**常见错误码：**
+- `400` - 请求参数错误（缺少必需参数）
+- `401` - 认证失败（API Key 无效或缺失）
+- `429` - 请求频率过高（超过速率限制）
+- `500` - 服务器内部错误
+
+### 最佳实践
+
+1. **环境变量管理**
+   - 将 API Key 和服务器地址存储在环境变量中，不要硬编码
+   - 使用配置文件或密钥管理服务
+
+2. **错误处理**
+   - 始终检查响应中的 `success` 字段
+   - 实现重试机制（指数退避）
+   - 记录错误日志以便排查问题
+
+3. **速率限制**
+   - 注意速率限制：每个 IP 15 分钟内最多 100 个请求
+   - 实现请求队列或批量处理
+
+4. **安全性**
+   - 使用 HTTPS（生产环境）
+   - 定期更换 API Key
+   - 不要在客户端代码中暴露 API Key
+
+5. **消息格式**
+   - 支持 HTML 格式，可以使用 `<b>粗体</b>`、`<i>斜体</i>` 等标签
+   - 注意转义特殊字符
 
 ## 安全说明
 
@@ -179,7 +373,7 @@ npm install -g pm2
 
 ```bash
 # 使用 PM2 配置文件启动
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # 或使用 npm 脚本
 npm run pm2:start
@@ -262,7 +456,7 @@ PM2 会生成以下日志文件（位于 `logs/` 目录）：
 
 #### PM2 配置文件说明
 
-`ecosystem.config.js` 文件包含以下配置：
+`ecosystem.config.cjs` 文件包含以下配置：
 - 应用名称和启动脚本
 - 自动重启策略
 - 内存限制（500MB）
