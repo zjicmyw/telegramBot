@@ -7,7 +7,15 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest"
+    "test": "jest",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop telegram-bot",
+    "pm2:restart": "pm2 restart telegram-bot",
+    "pm2:reload": "pm2 reload telegram-bot",
+    "pm2:delete": "pm2 delete telegram-bot",
+    "pm2:logs": "pm2 logs telegram-bot",
+    "pm2:status": "pm2 status",
+    "pm2:monit": "pm2 monit"
   },
   "dependencies": {
     "axios": "^1.6.7",

@@ -164,7 +164,115 @@ npm test
 
 ## 部署
 
-### Docker 部署
+### PM2 部署（推荐）
+
+PM2 是一个强大的 Node.js 进程管理器，提供自动重启、日志管理、进程监控等功能。
+
+#### 安装 PM2
+
+```bash
+# 全局安装 PM2
+npm install -g pm2
+```
+
+#### 使用配置文件启动
+
+```bash
+# 使用 PM2 配置文件启动
+pm2 start ecosystem.config.js
+
+# 或使用 npm 脚本
+npm run pm2:start
+```
+
+#### 使用部署脚本（推荐）
+
+```bash
+# 赋予执行权限
+chmod +x deploy.sh
+
+# 运行部署脚本（会自动检查环境、安装依赖、启动应用）
+./deploy.sh
+
+# 或使用其他命令
+./deploy.sh restart    # 重启应用
+./deploy.sh stop       # 停止应用
+./deploy.sh logs       # 查看日志
+./deploy.sh status     # 查看状态
+./deploy.sh help       # 查看帮助
+```
+
+#### PM2 常用命令
+
+```bash
+# 查看应用状态
+pm2 status
+# 或使用 npm 脚本
+npm run pm2:status
+
+# 查看日志
+pm2 logs telegram-bot
+# 或使用 npm 脚本
+npm run pm2:logs
+
+# 实时监控
+pm2 monit
+# 或使用 npm 脚本
+npm run pm2:monit
+
+# 重启应用
+pm2 restart telegram-bot
+# 或使用 npm 脚本
+npm run pm2:restart
+
+# 零停机重启（reload）
+pm2 reload telegram-bot
+# 或使用 npm 脚本
+npm run pm2:reload
+
+# 停止应用
+pm2 stop telegram-bot
+# 或使用 npm 脚本
+npm run pm2:stop
+
+# 删除应用
+pm2 delete telegram-bot
+# 或使用 npm 脚本
+npm run pm2:delete
+```
+
+#### 设置开机自启
+
+```bash
+# 生成启动脚本（根据提示执行相应命令）
+pm2 startup
+
+# 保存当前进程列表
+pm2 save
+```
+
+#### PM2 日志说明
+
+PM2 会生成以下日志文件（位于 `logs/` 目录）：
+- `pm2-error.log` - PM2 错误日志
+- `pm2-out.log` - PM2 输出日志
+- `pm2-combined.log` - PM2 合并日志
+
+这些日志与项目中的 winston 日志（`error.log`、`combined.log`）并存，互不干扰。
+
+#### PM2 配置文件说明
+
+`ecosystem.config.js` 文件包含以下配置：
+- 应用名称和启动脚本
+- 自动重启策略
+- 内存限制（500MB）
+- 日志路径和格式
+- 环境变量配置
+
+可以根据需要修改配置文件。
+
+### Docker 部署（备选）
+
 1. 构建镜像：
 ```bash
 docker build -t telegram-bot .
@@ -180,6 +288,7 @@ docker run -d \
 ```
 
 ### 直接部署
+
 1. 安装 Node.js 和 npm
 2. 克隆代码库
 3. 安装依赖

@@ -11,7 +11,10 @@ async function sendMessage() {
         // 发送 POST 请求到本地服务器
         const response = await axios.post('http://localhost:3000/send-message', {
             chatId: process.env.CHAT_ID,  // 从环境变量获取聊天 ID
-            message: "helloworld！！！的"   // 要发送的消息内容
+            message: "👋 你好！这是一个测试消息！\n" +
+                   "🎉 包含多个 emoji 表情\n" +
+                   "📱 测试消息内容\n" +
+                   "✅ 测试完成"   // 要发送的消息内容
         }, {
             headers: {
                 'Content-Type': 'application/json',
@@ -23,7 +26,7 @@ async function sendMessage() {
         console.log('Response:', response.data);
     } catch (error) {
         // 捕获并打印错误
-        console.error('Error:', error.response?.data || error.message);
+        console.error('Error:', error);
     }
 }
 
