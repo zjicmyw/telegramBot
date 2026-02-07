@@ -28,9 +28,31 @@ const authenticate = (req, res, next) => {
   next();
 };
 
+const mapSendMessageStatusCode = (result) => {
+  const status = Number(result?.statusCode);
+
+  if (!Number.isInteger(status)) {
+    return 500;
+  }
+
+  if (status === 502 || status === 504) {
+    return status;
+  }
+
+  if (status >= 500) {
+    return 502;
+  }
+
+  if (status >= 400 && status < 500) {
+    return status;
+  }
+
+  return 500;
+};
+
 // 发送消息接口
 // POST /send-message
-app.post('/send-message', authenticate, async (req, res) => {
+app.post('/send-message', authenticate, async (req, res, next) => {
   // 从请求体中获取参数
   const { chatId, message } = req.body;
 
@@ -42,10 +64,15 @@ app.post('/send-message', authenticate, async (req, res) => {
     });
   }
 
-  // 调用 bot 服务发送消息
-  const result = await botService.sendMessage(chatId, message);
-  // 根据发送结果返回相应的状态码
-  res.status(result.success ? 200 : 500).json(result);
+  try {
+    // 调用 bot 服务发送消息
+    const result = await botService.sendMessage(chatId, message);
+    // 根据发送结果返回相应的状态码
+    const statusCode = result.success ? 200 : mapSendMessageStatusCode(result);
+    return res.status(statusCode).json(result);
+  } catch (error) {
+    return next(error);
+  }
 });
 
 // 获取聊天信息接口
