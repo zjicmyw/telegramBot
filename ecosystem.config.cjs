@@ -26,13 +26,13 @@ module.exports = {
     // 最大内存限制（超过此限制将重启）
     max_memory_restart: '500M',
     
-    // 环境变量文件路径
-    env_file: '.env',
+    // 环境变量文件路径（dotenv 自己加载，PM2 不重复读）
+    // env_file: '.env',
     
-    // 生产环境配置
-    env: {
-      NODE_ENV: 'production'
-    },
+    // 生产环境配置（注释掉，用 dotenv 管理环境变量）
+    // env: {
+    //   NODE_ENV: 'production'
+    // },
     
     // 开发环境配置
     env_development: {
@@ -56,13 +56,13 @@ module.exports = {
     log_type: 'json',
     
     // 最小正常运行时间（毫秒），小于此时间重启不计入重启次数
-    min_uptime: '10s',
+    min_uptime: 60000,
     
     // 最大重启次数（15分钟内）
     max_restarts: 10,
     
     // 重启间隔（毫秒）
-    restart_delay: 4000,
+    restart_delay: 60000,
     
     // 不自动重启的错误退出码
     stop_exit_codes: [0],

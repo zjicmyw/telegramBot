@@ -33,6 +33,7 @@ class MessageQueueService {
     this.logger = logger;
     this.maxSize = toPositiveInt(queueConfig.maxSize, 5000);
     this.maxConcurrentChats = toPositiveInt(queueConfig.maxConcurrentChats, 20);
+    this.maxAttempts = toPositiveInt(queueConfig.maxAttempts, 5);
     this.retryTtlMs = toPositiveInt(queueConfig.retryTtlMs, 60 * 60 * 1000);
     this.retryBaseDelayMs = toPositiveInt(queueConfig.retryBaseDelayMs, 1000);
     this.retryMaxDelayMs = toPositiveInt(queueConfig.retryMaxDelayMs, 60 * 1000);
@@ -277,6 +278,11 @@ class MessageQueueService {
     task.updatedAt = now;
 
     if (!retryable) {
+      this._finalizeTask(task, { status: 'failed', result: failure });
+      return 'failed';
+    }
+
+    if (task.attempts >= this.maxAttempts) {
       this._finalizeTask(task, { status: 'failed', result: failure });
       return 'failed';
     }

@@ -167,6 +167,37 @@ describe('MessageQueueService', () => {
     expect(result.task.attempts).toBeGreaterThan(1);
   });
 
+  test('stops retrying after maxAttempts', async () => {
+    const botService = {
+      sendMessage: async () => ({
+        success: false,
+        error: 'temporary timeout',
+        retryable: true,
+        statusCode: 504
+      })
+    };
+
+    const queue = new MessageQueueService({
+      botService,
+      logger: createLogger(),
+      queueConfig: {
+        maxAttempts: 2,
+        retryTtlMs: 5000,
+        retryBaseDelayMs: 10,
+        retryMaxDelayMs: 20,
+        statusTtlMs: 1000
+      }
+    });
+
+    const queued = queue.enqueue({ chatId: 'chat-max', message: 'stop-retry' });
+    const result = await queue.waitForCompletion(queued.taskId, 2000);
+
+    expect(result.completed).toBe(true);
+    expect(result.task.status).toBe('failed');
+    expect(result.task.retryable).toBe(true);
+    expect(result.task.attempts).toBe(2);
+  });
+
   test('rejects enqueue when queue is full', async () => {
     const botService = {
       sendMessage: async () => new Promise(() => {})
