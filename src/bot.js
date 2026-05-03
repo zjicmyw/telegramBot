@@ -1,46 +1,20 @@
-// 导入必要的模块
 import axios from 'axios';
 import https from 'https';
-import winston from 'winston';
 import { config } from './config.js';
+import { logger } from './logger.js';
 
-// 配置日志系统
-// 使用 winston 创建日志记录器，支持文件和控制台输出
-const logger = winston.createLogger({
-  level: 'info',  // 设置日志级别为 info
-  format: winston.format.json(),  // 使用 JSON 格式记录日志
-  transports: [
-    // 错误日志单独记录到 error.log 文件
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    // 所有日志记录到 combined.log 文件
-    new winston.transports.File({ filename: 'combined.log' })
-  ]
-});
-
-// 在非生产环境下，同时输出日志到控制台
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.simple()  // 控制台使用简单格式
-  }));
-}
-
-// Telegram Bot 服务类
 class TelegramBotService {
   constructor() {
-    // 设置 API 基础 URL
     this.baseUrl = `https://api.telegram.org/bot${config.botToken}`;
-    
-    // 创建 axios 实例，配置默认选项
     this.axiosInstance = axios.create({
       baseURL: this.baseUrl,
-      timeout: 10000,  // 10秒超时
+      timeout: 10000,
       httpsAgent: new https.Agent({ keepAlive: true }),
       headers: {
         'Content-Type': 'application/json'
       }
     });
 
-    // 发送消息重试配置（仅用于可恢复错误）
     this.retryOptions = {
       maxAttempts: Number(process.env.TELEGRAM_MAX_RETRIES || 3),
       baseDelayMs: Number(process.env.TELEGRAM_RETRY_BASE_DELAY_MS || 500),
@@ -49,7 +23,6 @@ class TelegramBotService {
     };
   }
 
-  // 从 axios 错误中提取可读的错误信息（便于日志和 API 返回）
   _getErrorMessage(error) {
     const status = this._getUpstreamStatus(error);
     const description = error.response?.data?.description;
@@ -65,9 +38,11 @@ class TelegramBotService {
     if (status) {
       return `Telegram API ${status}: ${error.response?.statusText || 'Request failed'}`;
     }
+
     if (error.code) {
       return `Network: ${error.code}${error.message ? ` - ${error.message}` : ''}`;
     }
+
     return error.message || String(error);
   }
 
@@ -113,10 +88,18 @@ class TelegramBotService {
     );
   }
 
-  _getRetryDelayMs(error, attempt) {
+  _extractRetryAfterMs(error) {
     const retryAfterSec = Number(error.response?.data?.parameters?.retry_after);
-    if (Number.isFinite(retryAfterSec) && retryAfterSec > 0) {
-      return retryAfterSec * 1000;
+    if (!Number.isFinite(retryAfterSec) || retryAfterSec <= 0) {
+      return undefined;
+    }
+    return retryAfterSec * 1000;
+  }
+
+  _getRetryDelayMs(error, attempt) {
+    const retryAfterMs = this._extractRetryAfterMs(error);
+    if (retryAfterMs) {
+      return retryAfterMs;
     }
 
     const exponential = Math.min(
@@ -130,6 +113,7 @@ class TelegramBotService {
   _buildFailureResult(error, attempts) {
     const upstreamStatus = this._getUpstreamStatus(error);
     const isTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(String(error.message || ''));
+    const retryAfterMs = this._extractRetryAfterMs(error);
 
     let statusCode = upstreamStatus;
     if (!statusCode) {
@@ -141,14 +125,17 @@ class TelegramBotService {
       error: this._getErrorMessage(error),
       statusCode,
       retryable: this._isRetryableError(error),
+      retryAfterMs,
       attempts
     };
   }
 
   async _sendMessageWithRetries(payload, chatId, mode) {
     let lastError;
+    let attemptsMade = 0;
 
     for (let attempt = 1; attempt <= this.retryOptions.maxAttempts; attempt += 1) {
+      attemptsMade = attempt;
       try {
         const response = await this.axiosInstance.post('/sendMessage', payload);
         if (!response.data.ok) {
@@ -189,10 +176,12 @@ class TelegramBotService {
       }
     }
 
+    if (lastError) {
+      lastError.sendAttempts = attemptsMade;
+    }
     throw lastError;
   }
 
-  // 发送消息方法（先尝试 HTML，若 Telegram 报 HTML 解析错误则自动用纯文本重试）
   async sendMessage(chatId, message) {
     const payload = { chat_id: chatId, text: message };
     const withHtml = { ...payload, parse_mode: 'HTML' };
@@ -225,7 +214,8 @@ class TelegramBotService {
             mode: 'plain-text'
           };
         } catch (retryErr) {
-          const failure = this._buildFailureResult(retryErr, this.retryOptions.maxAttempts);
+          const attempts = Number(retryErr.sendAttempts || this.retryOptions.maxAttempts);
+          const failure = this._buildFailureResult(retryErr, attempts);
           logger.error('Failed to send message (after HTML parse retry)', {
             error: failure.error,
             chatId,
@@ -238,7 +228,8 @@ class TelegramBotService {
         }
       }
 
-      const failure = this._buildFailureResult(error, this.retryOptions.maxAttempts);
+      const attempts = Number(error.sendAttempts || this.retryOptions.maxAttempts);
+      const failure = this._buildFailureResult(error, attempts);
       logger.error('Failed to send message', {
         error: failure.error,
         chatId,
@@ -251,13 +242,12 @@ class TelegramBotService {
     }
   }
 
-  // 获取更新方法（可选）
   async getUpdates(offset = 0) {
     try {
       const response = await this.axiosInstance.get('/getUpdates', {
         params: { offset }
       });
-      
+
       if (!response.data.ok) {
         throw new Error(response.data.description || 'Unknown error');
       }
@@ -270,13 +260,12 @@ class TelegramBotService {
     }
   }
 
-  // 获取聊天信息方法（可选）
   async getChat(chatId) {
     try {
       const response = await this.axiosInstance.get('/getChat', {
         params: { chat_id: chatId }
       });
-      
+
       if (!response.data.ok) {
         throw new Error(response.data.description || 'Unknown error');
       }
@@ -290,5 +279,5 @@ class TelegramBotService {
   }
 }
 
-// 导出 TelegramBotService 的实例
-export const botService = new TelegramBotService(); 
+export { TelegramBotService };
+export const botService = new TelegramBotService();

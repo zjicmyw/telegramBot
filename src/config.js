@@ -1,24 +1,34 @@
-// 导入 dotenv 模块，用于加载环境变量
 import dotenv from 'dotenv';
-// 加载 .env 文件中的环境变量
+
 dotenv.config();
 
-// 导出配置对象
+const toPositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+};
+
+const defaultDeliveryMode = String(process.env.DEFAULT_DELIVERY_MODE || 'sync').toLowerCase();
+const normalizedDefaultDeliveryMode = defaultDeliveryMode === 'async' ? 'async' : 'sync';
+
 export const config = {
-  // Telegram Bot 的 Token，从环境变量中获取
   botToken: process.env.TELEGRAM_BOT_TOKEN,
-  
-  // 服务器端口号，默认 3000
-  port: process.env.PORT || 3000,
-  
-  // API 密钥，用于接口认证
+  port: toPositiveInt(process.env.PORT, 3000),
   apiKey: process.env.API_KEY,
-  
-  // 速率限制配置
+  defaultDeliveryMode: normalizedDefaultDeliveryMode,
+  syncWaitTimeoutMs: toPositiveInt(process.env.SYNC_WAIT_TIMEOUT_MS, 12000),
+  queue: {
+    maxSize: toPositiveInt(process.env.QUEUE_MAX_SIZE, 5000),
+    maxConcurrentChats: toPositiveInt(process.env.QUEUE_MAX_CONCURRENT_CHATS, 20),
+    retryTtlMs: toPositiveInt(process.env.QUEUE_RETRY_TTL_MS, 60 * 60 * 1000),
+    retryBaseDelayMs: toPositiveInt(process.env.QUEUE_RETRY_BASE_DELAY_MS, 1000),
+    retryMaxDelayMs: toPositiveInt(process.env.QUEUE_RETRY_MAX_DELAY_MS, 60 * 1000),
+    statusTtlMs: toPositiveInt(process.env.QUEUE_STATUS_TTL_MS, 24 * 60 * 60 * 1000)
+  },
   rateLimit: {
-    // 时间窗口：15分钟
     windowMs: 15 * 60 * 1000,
-    // 每个 IP 在时间窗口内最多允许的请求数
     max: 100
   }
-}; 
+};

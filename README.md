@@ -10,6 +10,8 @@
 - 实现请求频率限制
 - 完整的错误处理和日志记录
 - 支持获取聊天信息和更新
+- 支持同步和异步两种消息投递模式
+- 内置消息队列，支持按聊天顺序发送、失败重试和任务状态查询
 
 ## 技术栈
 
@@ -44,6 +46,20 @@ PORT=3000
 
 # API 密钥（用于接口认证）
 API_KEY=your_api_key_here
+
+# 默认投递模式：sync 表示等待发送结果，async 表示立即返回任务 ID
+DEFAULT_DELIVERY_MODE=sync
+
+# 同步模式等待发送完成的最长时间（毫秒）
+SYNC_WAIT_TIMEOUT_MS=12000
+
+# 队列配置
+QUEUE_MAX_SIZE=5000
+QUEUE_MAX_CONCURRENT_CHATS=20
+QUEUE_RETRY_TTL_MS=3600000
+QUEUE_RETRY_BASE_DELAY_MS=1000
+QUEUE_RETRY_MAX_DELAY_MS=60000
+QUEUE_STATUS_TTL_MS=86400000
 
 # 机器人用户名
 handle=@your_bot_username
@@ -83,9 +99,52 @@ kill -9 $(lsof -t -i:3000)
 
 ### 发送消息
 
+`/send-message` 支持两种模式：
+- `sync`: 等待消息发送完成后返回结果
+- `async`: 消息进入队列后立即返回任务 ID，之后通过 `/message-status` 查询状态
+
 **请求**
 ```http
 POST /send-message
+Content-Type: application/json
+X-API-Key: your_api_key_here
+
+{
+    "chatId": "目标聊天ID",
+    "message": "要发送的消息内容",
+    "mode": "sync"
+}
+```
+
+**同步成功响应（200）**
+```json
+{
+    "success": true,
+    "taskId": "msg_1710000000000_1",
+    "status": "sent",
+    "mode": "sync",
+    "attempts": 1,
+    "messageId": "消息ID"
+}
+```
+
+**同步等待超时或异步响应（202）**
+```json
+{
+    "success": true,
+    "taskId": "msg_1710000000000_1",
+    "status": "queued",
+    "mode": "sync"
+}
+```
+
+### 异步入队发送
+
+`/enqueue-message` 固定使用异步模式，适合不想让调用方等待 Telegram 返回结果的场景。
+
+**请求**
+```http
+POST /enqueue-message
 Content-Type: application/json
 X-API-Key: your_api_key_here
 
@@ -95,11 +154,38 @@ X-API-Key: your_api_key_here
 }
 ```
 
+**响应（202）**
+```json
+{
+    "success": true,
+    "taskId": "msg_1710000000000_1",
+    "status": "queued",
+    "mode": "async"
+}
+```
+
+### 查询消息任务状态
+
+**请求**
+```http
+GET /message-status?taskId=msg_1710000000000_1
+Content-Type: application/json
+X-API-Key: your_api_key_here
+```
+
 **响应**
 ```json
 {
     "success": true,
-    "messageId": "消息ID"
+    "taskId": "msg_1710000000000_1",
+    "chatId": "目标聊天ID",
+    "status": "sent",
+    "attempts": 1,
+    "messageId": "消息ID",
+    "createdAt": "2026-05-03T06:00:00.000Z",
+    "updatedAt": "2026-05-03T06:00:01.000Z",
+    "startedAt": "2026-05-03T06:00:00.100Z",
+    "completedAt": "2026-05-03T06:00:01.000Z"
 }
 ```
 
@@ -154,7 +240,8 @@ async function sendMessage(chatId, message) {
       `${API_BASE_URL}/send-message`,
       {
         chatId: chatId,
-        message: message
+        message: message,
+        mode: 'sync'
       },
       {
         headers: {
@@ -165,12 +252,34 @@ async function sendMessage(chatId, message) {
     );
     
     if (response.data.success) {
-      console.log('消息发送成功，消息ID:', response.data.messageId);
+      console.log('消息任务状态:', response.data.status);
+      console.log('任务ID:', response.data.taskId);
+      console.log('消息ID:', response.data.messageId);
       return response.data;
     } else {
       console.error('消息发送失败:', response.data.error);
       return null;
     }
+  } catch (error) {
+    console.error('请求错误:', error.response?.data || error.message);
+    return null;
+  }
+}
+
+// 查询消息任务状态
+async function getMessageStatus(taskId) {
+  try {
+    const response = await axios.get(
+      `${API_BASE_URL}/message-status`,
+      {
+        params: { taskId },
+        headers: {
+          'X-API-Key': API_KEY
+        }
+      }
+    );
+
+    return response.data;
   } catch (error) {
     console.error('请求错误:', error.response?.data || error.message);
     return null;
@@ -225,7 +334,8 @@ def send_message(chat_id, message):
     }
     data = {
         'chatId': chat_id,
-        'message': message
+        'message': message,
+        'mode': 'sync'
     }
     
     try:
@@ -234,11 +344,31 @@ def send_message(chat_id, message):
         result = response.json()
         
         if result.get('success'):
-            print(f"消息发送成功，消息ID: {result.get('messageId')}")
+            print(f"消息任务状态: {result.get('status')}")
+            print(f"任务ID: {result.get('taskId')}")
+            print(f"消息ID: {result.get('messageId')}")
             return result
         else:
             print(f"消息发送失败: {result.get('error')}")
             return None
+    except requests.exceptions.RequestException as e:
+        print(f"请求错误: {e}")
+        return None
+
+def get_message_status(task_id):
+    """查询消息任务状态"""
+    url = f'{API_BASE_URL}/message-status'
+    headers = {
+        'X-API-Key': API_KEY
+    }
+    params = {
+        'taskId': task_id
+    }
+
+    try:
+        response = requests.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        return response.json()
     except requests.exceptions.RequestException as e:
         print(f"请求错误: {e}")
         return None
@@ -281,11 +411,23 @@ get_chat_info('123456789')
 ```json
 {
     "success": true,
+    "taskId": "msg_1710000000000_1",
+    "status": "sent",
     "messageId": "12345"
 }
 ```
 
-**错误响应（400/401/500）：**
+**已接收但尚未完成（202）：**
+```json
+{
+    "success": true,
+    "taskId": "msg_1710000000000_1",
+    "status": "queued",
+    "mode": "async"
+}
+```
+
+**错误响应（400/401/404/429/500/503）：**
 ```json
 {
     "success": false,
@@ -296,7 +438,9 @@ get_chat_info('123456789')
 **常见错误码：**
 - `400` - 请求参数错误（缺少必需参数）
 - `401` - 认证失败（API Key 无效或缺失）
+- `404` - 任务不存在
 - `429` - 请求频率过高（超过速率限制）
+- `503` - 消息队列已满，服务暂时无法接收更多任务
 - `500` - 服务器内部错误
 
 ### 最佳实践
@@ -312,7 +456,7 @@ get_chat_info('123456789')
 
 3. **速率限制**
    - 注意速率限制：每个 IP 15 分钟内最多 100 个请求
-   - 实现请求队列或批量处理
+   - 大批量发送时优先使用异步模式，并通过任务状态接口查询结果
 
 4. **安全性**
    - 使用 HTTPS（生产环境）
@@ -352,6 +496,8 @@ npm test
 
 测试内容包括：
 - 消息发送功能
+- 同步和异步投递模式
+- 消息队列顺序、并发、重试和过载保护
 - 错误处理
 - 认证机制
 - 速率限制
@@ -499,4 +645,4 @@ docker run -d \
 
 ## 许可证
 
-MIT License 
+MIT License
