@@ -61,6 +61,11 @@ QUEUE_RETRY_BASE_DELAY_MS=1000
 QUEUE_RETRY_MAX_DELAY_MS=60000
 QUEUE_STATUS_TTL_MS=86400000
 
+# TradeResearch 策略买卖提醒
+TRADE_RESEARCH_DB_PATH=/Users/easthash/code/tradeResearch/data/market_engine.db
+TRADE_RESEARCH_STRATEGY_ALERT_LIMIT=20
+SUPPRESS_LEGACY_STRATEGY_REMINDERS=true
+
 # 机器人用户名
 handle=@your_bot_username
 
@@ -186,6 +191,34 @@ X-API-Key: your_api_key_here
     "updatedAt": "2026-05-03T06:00:01.000Z",
     "startedAt": "2026-05-03T06:00:00.100Z",
     "completedAt": "2026-05-03T06:00:01.000Z"
+}
+```
+
+### 查询 TradeResearch 策略买卖提醒
+
+只读读取 TradeResearch 的 `strategy_trade_alert` / `strategy_trade_execution`，仅展示当前六个实盘/候选策略。旧策略提醒会在 `/send-message` / `/enqueue-message` 入口被拦截，不再转发到 Telegram。
+
+**请求**
+```http
+GET /trade-research/strategy-alerts?limit=10
+Content-Type: application/json
+X-API-Key: your_api_key_here
+```
+
+**响应**
+```json
+{
+  "success": true,
+  "count": 1,
+  "strategies": [
+    {
+      "id": "L_EVT_SLOW_ACCUM_UP__stage8_reverse__tp10_sl5_h24_ee6_mc1_liq_medium_large",
+      "name": "慢趋势吸筹向上事件做空",
+      "side": "short"
+    }
+  ],
+  "message": "# TradeResearch 策略买卖提醒\n- 策略中文名：慢趋势吸筹向上事件做空\n- 交易对（symbol）：BROCCOLIF3BUSDT\n- 方向：做空\n- 信号类型：open（开仓）\n- 下单状态：被拦截（未真实下单）\n- 原因摘要：缺少可核验的真实开仓执行，平仓被拦截\n- 时间：2026-05-20 20:39:26",
+  "rows": []
 }
 ```
 

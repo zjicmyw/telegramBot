@@ -6,6 +6,16 @@ import { config } from './config.js';
 import { botService } from './bot.js';
 import { logger } from './logger.js';
 import { MessageQueueService } from './message-queue.js';
+import {
+  MEME_COIN_ALERT_SUPPRESSED_REASON,
+  shouldSuppressMemeCoinAlert
+} from './meme-coin-alert-suppressor.js';
+import {
+  formatStrategyAlertEventsForTelegram,
+  getTradeResearchStrategyMappings,
+  normalizeStrategyReminderMessage,
+  queryLatestStrategyAlertEvents
+} from './trade-research-strategy-reminders.js';
 
 const VALID_MODES = new Set(['sync', 'async']);
 
@@ -66,11 +76,19 @@ const buildAsyncAcceptedResponse = (taskId, task, mode) => ({
   mode
 });
 
+const defaultStrategyReminderService = {
+  normalizeMessage: normalizeStrategyReminderMessage,
+  loadLatestAlerts: queryLatestStrategyAlertEvents,
+  formatEventsForTelegram: formatStrategyAlertEventsForTelegram,
+  getMappings: getTradeResearchStrategyMappings
+};
+
 export const createApp = ({
   appConfig = config,
   botServiceInstance = botService,
   queueService = null,
-  loggerInstance = logger
+  loggerInstance = logger,
+  strategyReminderService = defaultStrategyReminderService
 } = {}) => {
   const runtimeConfig = mergeConfig(config, appConfig);
 
@@ -122,7 +140,41 @@ export const createApp = ({
     }
 
     try {
-      const enqueueResult = messageQueue.enqueue({ chatId, message });
+      if (shouldSuppressMemeCoinAlert(message)) {
+        loggerInstance.info('meme_coin_alert_suppressed', {
+          chatId,
+          reason: MEME_COIN_ALERT_SUPPRESSED_REASON
+        });
+        return res.status(200).json({
+          success: true,
+          status: 'suppressed',
+          mode: resolvedMode,
+          reason: MEME_COIN_ALERT_SUPPRESSED_REASON
+        });
+      }
+
+      const normalized = await strategyReminderService.normalizeMessage(
+        message,
+        runtimeConfig.tradeResearch
+      );
+
+      if (normalized?.action === 'suppress') {
+        loggerInstance.info('strategy_reminder_suppressed', {
+          chatId,
+          reason: normalized.reason,
+          strategyId: normalized.strategyId
+        });
+        return res.status(200).json({
+          success: true,
+          status: 'suppressed',
+          mode: resolvedMode,
+          reason: normalized.reason,
+          strategyId: normalized.strategyId
+        });
+      }
+
+      const outboundMessage = normalized?.message || message;
+      const enqueueResult = messageQueue.enqueue({ chatId, message: outboundMessage });
       if (!enqueueResult.accepted) {
         if (enqueueResult.error === 'QUEUE_OVERLOADED') {
           return res.status(503).json({
@@ -201,6 +253,32 @@ export const createApp = ({
 
   app.post('/enqueue-message', authenticate, async (req, res, next) => {
     await handleEnqueue(req, res, next, 'async');
+  });
+
+  app.get('/trade-research/strategy-alerts', authenticate, async (req, res) => {
+    try {
+      const limit = req.query.limit || runtimeConfig.tradeResearch.latestAlertLimit;
+      const rows = await strategyReminderService.loadLatestAlerts({
+        dbPath: runtimeConfig.tradeResearch.dbPath,
+        sqliteBin: runtimeConfig.tradeResearch.sqliteBin,
+        limit
+      });
+      return res.json({
+        success: true,
+        count: rows.length,
+        strategies: strategyReminderService.getMappings(),
+        message: strategyReminderService.formatEventsForTelegram(rows),
+        rows
+      });
+    } catch (error) {
+      loggerInstance.error('trade_research_strategy_alerts_failed', {
+        error: error?.message || String(error)
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to load TradeResearch strategy alerts'
+      });
+    }
   });
 
   app.get('/message-status', authenticate, (req, res) => {
